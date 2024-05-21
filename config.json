@@ -1,0 +1,7 @@
+{
+    "adresse_serveur":"192.168.50.200",
+    "port_tcp_serveur":1883,
+    "keepalive":1000,
+    "email_sender":"???????@gmail.com",
+    "debug" : false
+}
