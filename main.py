@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 #
 import sys,time,socket,json
 import tkinter as tk
@@ -11,9 +11,6 @@ class voteur(tk.Frame):
 
         self.root = root
 
-        # field options
-        options = {'padx': 5, 'pady': 5}
-        
         # get the screen dimension
         screen_width = root.winfo_screenwidth()
         screen_height = root.winfo_screenheight()
@@ -30,10 +27,6 @@ class voteur(tk.Frame):
         self.height = window_height
         
         super().__init__(root, bg='grey')
-        #super().__init__(root, width = window_width, height = window_height, bg='blue')
-
-        #self.geometry(f'{window_width}x{window_height}+{center_x}+{center_y}')
-
 
         self.lblTexte = tk.Label(self, anchor="center", bg="grey", fg="yellow")
         #self.lblTexte.place(relx=0.5, rely=0.5, relheight=0.2, relwidth=0.3)
@@ -42,7 +35,26 @@ class voteur(tk.Frame):
         self.lblTexte.configure(justify='center')
         self.lblTexte.configure(font=("Courrier New", 10, "bold"))
         #self.lbl.bind("<Button-1>", self.buttonPort)
-        
+
+class dlgVoteur:
+    
+    def __init__(self, parent):
+        self.parent = parent
+        self.top = tk.Toplevel(parent)
+        self.top.title("Configuration")
+        self.top.geometry("800x400")
+        self.top.resizable(True, True)
+
+        self.myCheckEmail = tk.IntVar(self.top)
+        self.myCheckEmail.set(False)
+        self.mEmail_check = tk.Checkbutton(self.top, text = "Actif", variable = self.myCheckEmail, onvalue = 1, offvalue = 0, height=3, width = 5)
+        self.mEmail_check.place(relx=0.80, rely=0.32, anchor=tk.W)
+
+    def show(self):
+        self.top.wm_deiconify()
+        self.top.wait_window()
+        return self.myCheckEmail.get()
+    
 
 class appVote:
 
@@ -62,8 +74,9 @@ class appVote:
 
         self.adresseIP = self.parametres['adresse_serveur']
         self.port = self.parametres['port_tcp_serveur']
-
-        self.email_sender = self.parametres['email_sender']
+        self.nbVoteurs = self.parametres['nb_voteurs']
+        self.nbColonnes = self.parametres['nb_colonnes']
+        self.nbRangees = self.parametres['nb_rangees']
 
         self.root = tk.Tk()
         self.root.geometry(geo)
@@ -129,24 +142,59 @@ class appVote:
         self.lblPortTCP.configure(text="Port " + ":" + str(self.port))
         self.lblPortTCP.configure(justify='left')
         self.lblPortTCP.configure(font=("Courrier New", 10, "bold"))
-        #self.lblPortTCP.bind("<Button-1>", self.buttonPort)
 
-        self.initialiseVoteurs(35, 5, 7)
-        #self.vott1 = voteur(self.root)
-        #self.vott1.place(relx=0, rely=0.25, height=100, width=100)
+        self.initialiseVoteurs(self.nbVoteurs, self.nbColonnes, self.nbRangees)
 
-    def initialiseVoteurs(self, nombre, nb_colonne, nb_ligne):
+        self.initialiseOutils()
+
+
+        
+
+    def initialiseOutils(self):
+
+        self.panneauLateral = tk.Frame(self.root, bg='grey', borderwidth=2)
+        self.panneauLateral.place(relx=0.65, rely=0.30, relheight=0.58, relwidth=0.30)   
+        
+        self.lblTitre = tk.Label(self.panneauLateral, anchor="w")
+        self.lblTitre.place(relx=0.43, rely=0.02, relheight=0.05, relwidth=0.15)
+        self.lblTitre.configure(text="Outils", bg="grey", fg="white")
+        self.lblTitre.configure(justify='center')
+        self.lblTitre.configure(font=("Courrier New", 10, "bold"))
+        
+        #self.lblAfficherAlias = tk.Label(self.panneauLateral, anchor="w")
+        #self.lblAfficherAlias.place(relx=0.05, rely=0.12, relheight=0.05, relwidth=0.35)
+        #self.lblAfficherAlias.configure(text="Afficher Alias", bg="grey", fg="white")
+        #self.lblAfficherAlias.configure(justify='center')
+        #self.lblAfficherAlias.configure(font=("Courrier New", 10, "bold"))
+        
+        self.myCheckAlias = tk.IntVar(self.panneauLateral)
+        self.myCheckAlias.set(False)
+        self.mAlias_check = tk.Checkbutton(self.panneauLateral, text = "Afficher Alias", variable = self.myCheckAlias, onvalue = 1, offvalue = 0, height=1, width = 12, bg="grey", fg = "white")
+        self.mAlias_check.place(relx=0.05, rely=0.15, anchor=tk.W)
+
+
+
+
+
+    def initialiseVoteurs(self, nombre, nb_colonnes, nb_lignes):
         
         rng = range(nombre)
         for i in rng:
-            vot = voteur(self.root, i)
-            vot.place(relx=0.05 + (i % nb_colonne) * (0.9 / nb_colonne),
-                        rely=0.30 + (i // nb_colonne) * (0.6 / nb_ligne),
-                        relheight=0.5/nb_ligne,
-                        relwidth=0.6/nb_colonne)
-            self.voteurs.append(vot)
-            #print(f"relx =  {0.02 + (i % nb_colonne) * (0.96 / nb_colonne)}")
-            #print(f"rely =  {0.30 + (i // nb_ligne) * (0.60 / nb_ligne)}")
+            self.vot = voteur(self.root, i+1)
+            self.vot.place(relx=0.05 + (i % nb_colonnes) * (0.6 / nb_colonnes),
+                        rely=0.30 + (i // nb_colonnes) * (0.6 / nb_lignes),
+                        relheight=0.5/nb_lignes,
+                        relwidth=0.5/nb_colonnes)
+            self.vot.bind("<Button-3>", self.confDlg)
+
+            self.voteurs.append(self.vot)
+
+    def confDlg(self, event):
+
+        print(str(event))
+        chck = dlgVoteur(self.root).show()
+        print(f"chck[0] == {chck}")
+        
     def run(self):
 
         while not self.lafin:
