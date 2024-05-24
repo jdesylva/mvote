@@ -1,11 +1,13 @@
 #!/usr/bin/python3
 #
-import sys,time,socket,json
+import sys,time,socket,json,socket
 import tkinter as tk
 from tkinter import ttk
 import tkinter.messagebox
 
 class voteur(tk.Frame):
+
+    valeurChoisie = 0
 
     def __init__(self, root, index):
 
@@ -29,12 +31,18 @@ class voteur(tk.Frame):
         super().__init__(root, bg='grey')
 
         self.lblTexte = tk.Label(self, anchor="center", bg="grey", fg="yellow")
-        #self.lblTexte.place(relx=0.5, rely=0.5, relheight=0.2, relwidth=0.3)
         self.lblTexte.place(relx=0.5, rely=0.5)
         self.lblTexte.configure(text=str(index))
         self.lblTexte.configure(justify='center')
         self.lblTexte.configure(font=("Courrier New", 10, "bold"))
         #self.lbl.bind("<Button-1>", self.buttonPort)
+
+    def setVote(self, valeur):
+        self.valeurChoisie = valeur 
+        
+    def getVote(self, valeur):
+        return self.valeurChoisie 
+        
 
 class dlgVoteur:
     
@@ -74,9 +82,12 @@ class appVote:
 
         self.adresseIP = self.parametres['adresse_serveur']
         self.port = self.parametres['port_tcp_serveur']
+        self.backlog = self.parametres['backlog']
+        
         self.nbVoteurs = self.parametres['nb_voteurs']
         self.nbColonnes = self.parametres['nb_colonnes']
         self.nbRangees = self.parametres['nb_rangees']
+        
 
         self.root = tk.Tk()
         self.root.geometry(geo)
@@ -119,6 +130,7 @@ class appVote:
 
         self.Header = tk.Label(self.root, image=self.photo, width=image_width, height=image_height)
         self.Header.place(relx=0.5, rely=0.03, anchor=tk.N)
+        self.Header.bind("<Button-1>", self.buttonLogoClick)
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         
@@ -130,6 +142,7 @@ class appVote:
             self.adresseIP='127.0.0.1'
         finally:
             s.close()
+            
         self.lblAdresseIP = tk.Label(self.root, anchor="w")                     # Bas de page
         self.lblAdresseIP.place(relx=0.05, rely=0.95, height=23, width=225)
         self.lblAdresseIP.configure(text="Serveur " + self.adresseIP)
@@ -161,20 +174,109 @@ class appVote:
         self.lblTitre.configure(justify='center')
         self.lblTitre.configure(font=("Courrier New", 10, "bold"))
         
-        #self.lblAfficherAlias = tk.Label(self.panneauLateral, anchor="w")
-        #self.lblAfficherAlias.place(relx=0.05, rely=0.12, relheight=0.05, relwidth=0.35)
-        #self.lblAfficherAlias.configure(text="Afficher Alias", bg="grey", fg="white")
-        #self.lblAfficherAlias.configure(justify='center')
-        #self.lblAfficherAlias.configure(font=("Courrier New", 10, "bold"))
+        self.lblNombreChoix = tk.Label(self.panneauLateral, anchor="w")
+        self.lblNombreChoix.place(relx=0.05, rely=0.22, relheight=0.05, relwidth=0.45)
+        self.lblNombreChoix.configure(text="Nombre de choix : ", bg="grey", fg="white")
+        self.lblNombreChoix.configure(justify='center')
+        self.lblNombreChoix.configure(font=("Courrier New", 10, "bold"))
+
+        self.nbChoixVar = tk.StringVar()
+        self.nbChoixVar.set("2")
         
+        self.entryNbChoix = tk.Entry(self.panneauLateral, textvariable=self.nbChoixVar)
+        self.entryNbChoix.place(relx=0.50, rely=0.22, width=50)
+
+        self.lblDureeVote = tk.Label(self.panneauLateral, anchor="w")
+        self.lblDureeVote.place(relx=0.05, rely=0.32, relheight=0.05, relwidth=0.45)
+        self.lblDureeVote.configure(text="Durée du vote (s): ", bg="grey", fg="white")
+        self.lblDureeVote.configure(justify='center')
+        self.lblDureeVote.configure(font=("Courrier New", 10, "bold"))
+
+        self.dureeVoteVar = tk.StringVar()
+        self.dureeVoteVar.set("0")
+        
+        self.entryDureeVote = tk.Entry(self.panneauLateral, textvariable=self.dureeVoteVar)
+        self.entryDureeVote.place(relx=0.50, rely=0.32, width=50)
+
+        self.btnDemarrer = tk.Button(self.panneauLateral, text="Démarrer", command = self.controlerVote)
+        self.btnDemarrer.place(relx=0.75, rely=0.22, relheight=0.05, relwidth=0.2)
+        self.btnDemarrer.configure(bg="green", fg="yellow", activebackground="green")
+        
+        self.entete_voteurs = ["Choix", "Résultat"]
+
+        style = ttk.Style(self.panneauLateral)
+        style.theme_use("clam")
+        style.configure("Treeview", background="grey", 
+                fieldbackground="grey", foreground="white")
+
+        self.tree = ttk.Treeview(self.panneauLateral, columns=self.entete_voteurs, show="tree headings", height=10)
+        self.tree.column("# 0", anchor=tk.W, width=10)
+        self.tree.heading("# 0", text="")
+        self.tree.column("# 1", anchor=tk.W, width=30)
+        self.tree.heading("# 1", text="Choix")
+        self.tree.column("# 2", anchor=tk.W, width=30)
+        self.tree.heading("# 2", text="Résultat")
+
+        vsb = ttk.Scrollbar(self.tree, orient="vertical", command=self.tree.yview)
+        hsb = ttk.Scrollbar(self.tree, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+        vsb.pack(side="right", fill="y")
+        hsb.pack(side="bottom", fill="x")
+
+        self.tree.place(relx=0.05, rely=0.4, relheight=0.55, relwidth=0.9)
+        self.tree['show'] = 'tree headings'
+
         self.myCheckAlias = tk.IntVar(self.panneauLateral)
         self.myCheckAlias.set(False)
-        self.mAlias_check = tk.Checkbutton(self.panneauLateral, text = "Afficher Alias", variable = self.myCheckAlias, onvalue = 1, offvalue = 0, height=1, width = 12, bg="grey", fg = "white")
+        self.mAlias_check = tk.Checkbutton(self.panneauLateral, text = "Afficher Alias", variable = self.myCheckAlias, onvalue = "1", offvalue = "0", height=1, width = 12, bg="grey", fg = "white", command=self.aliasActive)
         self.mAlias_check.place(relx=0.05, rely=0.15, anchor=tk.W)
+        
+    def aliasActive(self):
+        if self.myCheckAlias.get() == 1:
+            print("Checkbox == 1")
+        elif self.myCheckAlias.get() == 0:
+            print("Checkbox == 0")
+
+    def controlerVote(self):
+        if self.btnDemarrer['text'] == 'Démarrer' :
+            self.btnDemarrer.configure(text="Arrêter", bg="red", fg="yellow", activebackground="red")
+            print("Le vote est en cours.")
+            self.effacerResultatVote()
+            self.demarrerServeur()
+            self.demarrerHorloge()
+        else :
+            self.btnDemarrer.configure(text="Démarrer", bg="green", fg="yellow", activebackground="green")
+            print("Le vote est terminé.")
+            self.arreterServeur()
+            self.arreterHorloge()
+
+    def effacerResultatVote(self):
+
+        print("Le résultat du vote précédent a été effacé.")
 
 
+    def demarrerServeur(self):
 
+        # Créer le socket serveur
+        self.serveur =  socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
+        self.serveur.bind((self.adresseIP, self.port))
+        self.serveur.listen(self.backlog)
+        
+        print("Le serveur est en opération.")
+
+    def demarrerHorloge(self):
+
+        print("Le compteur du temps de vote est en cours")
+
+    def arreterServeur(self):
+
+        self.serveur.close()
+        print("Le serveur est arrêté.")
+
+    def arreterHorloge(self):
+
+        print("Le compteur du temps est arrêté.")
 
     def initialiseVoteurs(self, nombre, nb_colonnes, nb_lignes):
         
@@ -194,6 +296,10 @@ class appVote:
         print(str(event))
         chck = dlgVoteur(self.root).show()
         print(f"chck[0] == {chck}")
+        
+    def buttonLogoClick(self, event):
+
+        self.on_closing()
         
     def run(self):
 

@@ -1,6 +1,7 @@
 {
-    "adresse_serveur":"192.168.50.200",
+    "adresse_serveur":"0.0.0.0",
     "port_tcp_serveur":1234,
+    "backlog":40,
     "nb_voteurs" : 35,
     "nb_colonnes": 6,
     "nb_rangees" : 6,
