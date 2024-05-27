@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 import tkinter
 from tkinter import ttk
+import tkinter.messagebox
 import socket
 
 entryAdresseHote = None
@@ -9,19 +10,21 @@ entryCommande = None
 
 def envoi():
 
-    global entryAdresseHote
-    
-    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    host = socket.gethostbyname(txtAdresse.get())
-    port = txtPort.get()
-    client.connect((host,int(port)))
-    #data = server.recv(1024)
-    #print(bytes.decode(data))
+    try:
+        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        host = socket.gethostbyname(txtAdresse.get())
+        port = txtPort.get()
+        client.connect((host,int(port)))
+        #data = server.recv(1024)
+        #print(bytes.decode(data))
 
-    client.send(str.encode(txtCommande.get()))
-    #data = server.recv(1024)
-    #print("Received from server: ", bytes.decode(data))
-    client.close()
+        client.send(str.encode(txtCommande.get()))
+        #data = server.recv(1024)
+        #print("Received from server: ", bytes.decode(data))
+        client.close()
+    except Exception as e :
+        tkinter.messagebox.showerror("Erreur", f"L'erreur suivante s'est produite : {e}")
+
 
 root = tkinter.Tk()
 root.title("Client pour la machine à voter")
