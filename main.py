@@ -4,36 +4,28 @@ import sys,time,socket,json,socket
 import tkinter as tk
 from tkinter import ttk
 import tkinter.messagebox
+import threading
+import select
+from queue import Queue
+
+qGUI = Queue(0)
 
 class voteur(tk.Frame):
 
     valeurChoisie = 0
 
-    def __init__(self, root, index):
+    def __init__(self, root, etiquette):
 
         self.root = root
 
-        # get the screen dimension
-        screen_width = root.winfo_screenwidth()
-        screen_height = root.winfo_screenheight()
-
-        window_width = screen_width / 4
-        window_height = screen_height / 4
-
-        # find the center point
-        center_x = int(screen_width/2 - window_width / 2)
-        center_y = int(screen_height/2 - window_height / 2)
-
-        # set the position of the window to the center of the screen
-        self.width = window_width
-        self.height = window_height
-        
         super().__init__(root, bg='grey')
 
-        self.lblTexte = tk.Label(self, anchor="center", bg="grey", fg="yellow")
-        self.lblTexte.place(relx=0.5, rely=0.5)
-        self.lblTexte.configure(text=str(index))
-        self.lblTexte.configure(justify='center')
+        self.lblTexte = tk.Label(self, anchor=tk.W, bg="grey", fg="yellow")
+        self.lblTexte.place(relx=0.05, rely=0.25)
+
+        self.lblTexte.configure(text=str(etiquette))
+
+        self.lblTexte.configure(justify="left")
         self.lblTexte.configure(font=("Courrier New", 10, "bold"))
         #self.lbl.bind("<Button-1>", self.buttonPort)
 
@@ -54,7 +46,7 @@ class dlgVoteur:
         self.top.resizable(True, True)
 
         self.myCheckEmail = tk.IntVar(self.top)
-        self.myCheckEmail.set(False)
+        self.myCheckEmail.set(1)
         self.mEmail_check = tk.Checkbutton(self.top, text = "Actif", variable = self.myCheckEmail, onvalue = 1, offvalue = 0, height=3, width = 5)
         self.mEmail_check.place(relx=0.80, rely=0.32, anchor=tk.W)
 
@@ -74,6 +66,7 @@ class appVote:
     port = None
     root = None
     voteurs = []
+    resultats = []
 
     def __init__(self, geo="1000x700+225+150", confFile="config.json"):
 
@@ -87,7 +80,6 @@ class appVote:
         self.nbVoteurs = self.parametres['nb_voteurs']
         self.nbColonnes = self.parametres['nb_colonnes']
         self.nbRangees = self.parametres['nb_rangees']
-        
 
         self.root = tk.Tk()
         self.root.geometry(geo)
@@ -115,13 +107,6 @@ class appVote:
             print("Erreur : ", excpt)
             sys.exit()
             
-        # Get the current screen width and height
-        screen_width = self.root.winfo_screenwidth()
-        screen_height = self.root.winfo_screenheight()
-
-        window_width = self.root.winfo_width()
-        window_height = self.root.winfo_height()
-        
         # get the width and height of the image
         image_width = self.photo.width()
         image_height = self.photo.height()
@@ -156,12 +141,9 @@ class appVote:
         self.lblPortTCP.configure(justify='left')
         self.lblPortTCP.configure(font=("Courrier New", 10, "bold"))
 
-        self.initialiseVoteurs(self.nbVoteurs, self.nbColonnes, self.nbRangees)
-
         self.initialiseOutils()
 
-
-        
+        self.initialiseVoteurs(self.nbVoteurs, self.nbColonnes, self.nbRangees)
 
     def initialiseOutils(self):
 
@@ -226,17 +208,21 @@ class appVote:
         self.tree.place(relx=0.05, rely=0.4, relheight=0.55, relwidth=0.9)
         self.tree['show'] = 'tree headings'
 
-        self.myCheckAlias = tk.IntVar(self.panneauLateral)
-        self.myCheckAlias.set(False)
-        self.mAlias_check = tk.Checkbutton(self.panneauLateral, text = "Afficher Alias", variable = self.myCheckAlias, onvalue = "1", offvalue = "0", height=1, width = 12, bg="grey", fg = "white", command=self.aliasActive)
+        self.myCheckAlias = tk.IntVar(self.root)
+        self.myCheckAlias.set(1)
+        self.mAlias_check = tk.Checkbutton(self.panneauLateral, text = "Afficher Alias", variable = self.myCheckAlias, onvalue = 1, offvalue = 0, height=1, width = 12, bg="grey", fg = "white", command=self.aliasActive)
+
         self.mAlias_check.place(relx=0.05, rely=0.15, anchor=tk.W)
+        self.aliasActive()
         
     def aliasActive(self):
         if self.myCheckAlias.get() == 1:
-            print("Checkbox == 1")
+            self.mAlias_check.configure(fg = "yellow")
         elif self.myCheckAlias.get() == 0:
-            print("Checkbox == 0")
-
+            self.mAlias_check.configure(fg = "white")
+        self.parametres["avec_alias"] = self.myCheckAlias.get()
+        self.initialiseVoteurs(self.parametres["nb_voteurs"], self.parametres["nb_colonnes"], self.parametres["nb_rangees"])
+        
     def controlerVote(self):
         if self.btnDemarrer['text'] == 'Démarrer' :
             self.btnDemarrer.configure(text="Arrêter", bg="red", fg="yellow", activebackground="red")
@@ -254,8 +240,60 @@ class appVote:
 
         print("Le résultat du vote précédent a été effacé.")
 
-
     def demarrerServeur(self):
+
+        self.t = threading.Thread ( target = self.tServer, daemon=True )
+        self.t.start()
+
+    def tServer(self) :
+
+        read_list = []
+        
+        try:
+
+            self.mServeur = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.mServeur.bind((self.adresseIP, self.port))
+            self.mServeur.listen(self.backlog)
+
+            read_list.append(self.mServeur)
+            
+            print("En attente d'un client...")
+
+            while True :
+
+                readable, writable, errored = select.select(read_list, [], [])
+
+                for s in readable:
+                    
+                    if s is self.mServeur:
+            
+                        client, addr = s.accept()
+                        read_list.append(client)
+                        print(time.asctime() + "    Connexion établie avec le système : ", addr)
+                    else :
+                        data = s.recv(1024).decode()
+                        if(len(data) > 0):
+                            print("data serveur == " + data)
+                            qGUI.put(data)
+
+                time.sleep(0.01)
+                
+        except Exception as ose:
+            print ("Erreur du serveur sur le port " + str(self.port) + " du système " + str(self.adresseIP) + " .")
+            print ("Exception : " + str(ose) )
+        
+        finally:
+            
+            print(len(read_list))
+            if len(read_list) > 0 :
+                readable, writable, errored = select.select(read_list, [], [])
+                for s in readable:
+                    s.close()
+
+            print(time.asctime() + "    Connexion terminée.")
+            lafin = True
+            
+    def demarrerServeur_1(self):
 
         # Créer le socket serveur
         self.serveur =  socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -271,26 +309,63 @@ class appVote:
 
     def arreterServeur(self):
 
-        self.serveur.close()
+        self.mServeur.close()
         print("Le serveur est arrêté.")
 
     def arreterHorloge(self):
 
         print("Le compteur du temps est arrêté.")
 
-    def initialiseVoteurs(self, nombre, nb_colonnes, nb_lignes):
+    def afficherVoteur(self, index, vote):
+
+        i = int(index)
+
+        print(f"str(vote) == {str(vote)}")
+        self.resultats = str(vote)
+        print(f"voteur ==>> {index}; choix = {vote}")
+        self.voteurs[i].destroy()
+        #vot = voteur(self.root, str(vote))
+        vot = voteur(self.root, vote)
+        self.voteurs.insert(i, vot)
         
+        vot.place(relx=0.05 + (i % self.nbColonnes) * (0.6 / self.nbColonnes),
+                  rely=0.30 + (i // self.nbColonnes) * (0.6 / self.nbRangees),
+                  relheight=0.5/self.nbRangees,
+                  relwidth=0.5/self.nbColonnes)
+        
+        vot.configure(bg=self.parametres["couleurs_votes"][int(vote)])
+        vot.bind("<Button-3>", self.confDlg)
+
+    def initialiseVoteurs(self, nombre, nb_colonnes, nb_lignes):
+
+        for vot in self.voteurs:
+            vot.destroy()
+
+        self.voteurs = []
+            
         rng = range(nombre)
+
         for i in rng:
-            self.vot = voteur(self.root, i+1)
+
+            if self.myCheckAlias.get() == 0:
+                # Afficher l'index du voteur dans le GUI
+                self.vot = voteur(self.root, self.parametres["voteurs"][i][0])
+            else:
+                # Affichier l'alias
+                self.vot = voteur(self.root, self.parametres["voteurs"][i][1])
+
+            print(self.vot)
+        
             self.vot.place(relx=0.05 + (i % nb_colonnes) * (0.6 / nb_colonnes),
-                        rely=0.30 + (i // nb_colonnes) * (0.6 / nb_lignes),
-                        relheight=0.5/nb_lignes,
-                        relwidth=0.5/nb_colonnes)
+                           rely=0.30 + (i // nb_colonnes) * (0.6 / nb_lignes),
+                           relheight=0.5/nb_lignes,
+                           relwidth=0.5/nb_colonnes)
             self.vot.bind("<Button-3>", self.confDlg)
 
             self.voteurs.append(self.vot)
-
+            self.resultats.append(-1)
+            
+            
     def confDlg(self, event):
 
         print(str(event))
@@ -307,10 +382,20 @@ class appVote:
     
             self.root.update_idletasks()
             self.root.update()
+            if(not qGUI.empty()):
+                data = qGUI.get()
+                print("Données GUI reçues!" + data)
+                self.majGUI(data)
             time.sleep(0.01)
             
         self.root.quit()
 
+    def majGUI(self, data):
+        
+        dataSplit = data.split(':')
+        print(dataSplit)
+        self.afficherVoteur(dataSplit[0], dataSplit[1])
+        
     def on_closing(self):
 
         if tk.messagebox.askokcancel("Terminé ?", "Est-ce que vous voulez fermer le programme ?"):
@@ -318,6 +403,7 @@ class appVote:
             self.lafin = True
             time.sleep(1)
             
+
 application = appVote("1190x750+225+150")
 application.run()
     
