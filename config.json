@@ -2,15 +2,16 @@
     "adresse_serveur":"0.0.0.0",
     "port_tcp_serveur":1234,
     "backlog":40,
-    "nb_voteurs" : 35,
-    "nb_colonnes": 5,
-    "nb_rangees" : 7,
+    "nb_voteurs" : 23,
+    "nb_colonnes": 6,
+    "nb_rangees" : 4,
     "avec_alias" : 0,
     "couleurs_votes" : [
-	"red",
+	"darkred",
 	"blue",
-	"#333333",
-	"#00FF00"
+	"#883388",
+	"#008800",
+	"darkgrey"
     ],
     "voteurs" : [
 	[1, "Pierre", "resultat"],

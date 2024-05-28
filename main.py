@@ -8,17 +8,22 @@ import threading
 import select
 from queue import Queue
 
+import pdb
+
+
 qGUI = Queue(0)
 
 class voteur(tk.Frame):
 
-    valeurChoisie = 0
+    valeurChoisie = -1
 
     def __init__(self, root, etiquette):
 
         self.root = root
 
         super().__init__(root, bg='grey')
+
+        self.valeurChoisie = -1
 
         self.lblTexte = tk.Label(self, anchor=tk.W, bg="grey", fg="yellow")
         self.lblTexte.place(relx=0.05, rely=0.25)
@@ -30,9 +35,9 @@ class voteur(tk.Frame):
         #self.lbl.bind("<Button-1>", self.buttonPort)
 
     def setVote(self, valeur):
-        self.valeurChoisie = valeur 
+        self.valeurChoisie = int(valeur) 
         
-    def getVote(self, valeur):
+    def getVote(self):
         return self.valeurChoisie 
         
 
@@ -192,8 +197,8 @@ class appVote:
                 fieldbackground="grey", foreground="white")
 
         self.tree = ttk.Treeview(self.panneauLateral, columns=self.entete_voteurs, show="tree headings", height=10)
-        self.tree.column("# 0", anchor=tk.W, width=10)
-        self.tree.heading("# 0", text="")
+        self.tree.column("# 0", anchor=tk.W, width=0)
+        #self.tree.heading("# 0", text="")
         self.tree.column("# 1", anchor=tk.W, width=30)
         self.tree.heading("# 1", text="Choix")
         self.tree.column("# 2", anchor=tk.W, width=30)
@@ -208,13 +213,44 @@ class appVote:
         self.tree.place(relx=0.05, rely=0.4, relheight=0.55, relwidth=0.9)
         self.tree['show'] = 'tree headings'
 
+        rng = range(len(self.parametres["couleurs_votes"]))
+        i = 0
+        for couleur in rng :
+            
+            self.tree.tag_configure(self.parametres["couleurs_votes"][couleur], background=self.parametres["couleurs_votes"][couleur])
+
+            self.tree.insert("", tk.END, text='', tags=self.parametres["couleurs_votes"][couleur], values=[str(i+1), ""])
+            i += 1
+        self.tree.bind("<Button-1>", self.itemMouseEvent)
+        self.tree.bind("<Button-3>", self.itemMouseEvent)
+        self.tree.bind("<Double-1>", self.itemMouseEvent)
+
         self.myCheckAlias = tk.IntVar(self.root)
         self.myCheckAlias.set(1)
         self.mAlias_check = tk.Checkbutton(self.panneauLateral, text = "Afficher Alias", variable = self.myCheckAlias, onvalue = 1, offvalue = 0, height=1, width = 12, bg="grey", fg = "white", command=self.aliasActive)
 
         self.mAlias_check.place(relx=0.05, rely=0.15, anchor=tk.W)
         self.aliasActive()
+
+    def majTreeview(self):
+
+        self.tree.delete(*self.tree.get_children())
         
+        rng = range(len(self.parametres["couleurs_votes"]))
+        i = 0
+        for couleur in rng :
+            
+            self.tree.insert("", tk.END, text='', tags=self.parametres["couleurs_votes"][couleur], values=[str(i+1), self.resultats[i]])
+            i += 1
+
+
+    def itemMouseEvent(self, event):
+
+        #itemSelect = self.tree.selection()
+        # Si le bouton droit de la sourie est activé
+        if event.num == 1 :
+            self.majTreeview()
+
     def aliasActive(self):
         if self.myCheckAlias.get() == 1:
             self.mAlias_check.configure(fg = "yellow")
@@ -239,15 +275,18 @@ class appVote:
     def effacerResultatVote(self):
 
         print("Le résultat du vote précédent a été effacé.")
+        for voteur in self.voteurs :
+            voteur.setVote(-1)
 
     def demarrerServeur(self):
 
         self.t = threading.Thread ( target = self.tServer, daemon=True )
         self.t.start()
+        self.mAlias_check['state'] = tk.DISABLED
 
     def tServer(self) :
 
-        read_list = []
+        self.read_list = []
         
         try:
 
@@ -255,20 +294,20 @@ class appVote:
             self.mServeur.bind((self.adresseIP, self.port))
             self.mServeur.listen(self.backlog)
 
-            read_list.append(self.mServeur)
+            self.read_list.append(self.mServeur)
             
             print("En attente d'un client...")
 
             while True :
 
-                readable, writable, errored = select.select(read_list, [], [])
+                readable, writable, errored = select.select(self.read_list, [], [])
 
                 for s in readable:
                     
                     if s is self.mServeur:
             
                         client, addr = s.accept()
-                        read_list.append(client)
+                        self.read_list.append(client)
                         print(time.asctime() + "    Connexion établie avec le système : ", addr)
                     else :
                         data = s.recv(1024).decode()
@@ -293,23 +332,15 @@ class appVote:
             print(time.asctime() + "    Connexion terminée.")
             lafin = True
             
-    def demarrerServeur_1(self):
-
-        # Créer le socket serveur
-        self.serveur =  socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-        self.serveur.bind((self.adresseIP, self.port))
-        self.serveur.listen(self.backlog)
-        
-        print("Le serveur est en opération.")
-
     def demarrerHorloge(self):
 
         print("Le compteur du temps de vote est en cours")
 
     def arreterServeur(self):
 
+        self.read_list.remove(self.mServeur)
         self.mServeur.close()
+        self.mAlias_check['state'] = tk.NORMAL
         print("Le serveur est arrêté.")
 
     def arreterHorloge(self):
@@ -321,11 +352,19 @@ class appVote:
         i = int(index)
 
         print(f"str(vote) == {str(vote)}")
-        self.resultats = str(vote)
+        print(f"self.voteurs[{i}].getVote() == {self.voteurs[i].getVote()}")
+        if self.voteurs[i].getVote() != -1 :
+            #breakpoint()
+            self.resultats[self.voteurs[i].getVote()] -= 1
+        self.resultats[vote] += 1
+        self.majTreeview()
         print(f"voteur ==>> {index}; choix = {vote}")
-        self.voteurs[i].destroy()
-        #vot = voteur(self.root, str(vote))
-        vot = voteur(self.root, vote)
+        print(f"i == {i}")
+        vv = self.voteurs[i]
+        self.voteurs.remove(vv)
+        vv.destroy()
+        vot = voteur(self.root, vote+1)
+        vot.setVote(vote)
         self.voteurs.insert(i, vot)
         
         vot.place(relx=0.05 + (i % self.nbColonnes) * (0.6 / self.nbColonnes),
@@ -353,8 +392,6 @@ class appVote:
             else:
                 # Affichier l'alias
                 self.vot = voteur(self.root, self.parametres["voteurs"][i][1])
-
-            print(self.vot)
         
             self.vot.place(relx=0.05 + (i % nb_colonnes) * (0.6 / nb_colonnes),
                            rely=0.30 + (i // nb_colonnes) * (0.6 / nb_lignes),
@@ -363,9 +400,9 @@ class appVote:
             self.vot.bind("<Button-3>", self.confDlg)
 
             self.voteurs.append(self.vot)
-            self.resultats.append(-1)
-            
-            
+            self.resultats.append(0)
+
+
     def confDlg(self, event):
 
         print(str(event))
@@ -394,7 +431,10 @@ class appVote:
         
         dataSplit = data.split(':')
         print(dataSplit)
-        self.afficherVoteur(dataSplit[0], dataSplit[1])
+        if int(dataSplit[0]) < self.nbVoteurs :
+            self.afficherVoteur(dataSplit[0], int(dataSplit[1]))
+        else :
+            tk.messagebox.showinfo("Attention!", f"Le voteur {dataSplit[0]} a transmis son vote mais il ne fait pas partie des voteurs autorisés.")
         
     def on_closing(self):
 
@@ -403,7 +443,6 @@ class appVote:
             self.lafin = True
             time.sleep(1)
             
-
 application = appVote("1190x750+225+150")
 application.run()
     
