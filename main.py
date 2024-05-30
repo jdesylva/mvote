@@ -8,6 +8,7 @@ import threading
 import select
 from queue import Queue
 
+import logging
 import pdb
 
 
@@ -17,13 +18,14 @@ class voteur(tk.Frame):
 
     valeurChoisie = -1
 
-    def __init__(self, root, etiquette):
+    def __init__(self, root, etiquette, vote):
 
         self.root = root
+        self.etiquette = etiquette
 
         super().__init__(root, bg='grey')
 
-        self.valeurChoisie = -1
+        self.valeurChoisie = vote
 
         self.lblTexte = tk.Label(self, anchor=tk.W, bg="grey", fg="yellow")
         self.lblTexte.place(relx=0.05, rely=0.25)
@@ -34,8 +36,9 @@ class voteur(tk.Frame):
         self.lblTexte.configure(font=("Courrier New", 10, "bold"))
         #self.lbl.bind("<Button-1>", self.buttonPort)
 
-    def setVote(self, valeur):
-        self.valeurChoisie = int(valeur) 
+    def setVote(self, valeur, couleur):
+        self.valeurChoisie = int(valeur)
+        self.lblTexte.configure(bg=couleur)
         
     def getVote(self):
         return self.valeurChoisie 
@@ -72,6 +75,7 @@ class appVote:
     root = None
     voteurs = []
     resultats = []
+    lafinSrv = False
 
     def __init__(self, geo="1000x700+225+150", confFile="config.json"):
 
@@ -160,21 +164,9 @@ class appVote:
         self.lblTitre.configure(text="Outils", bg="grey", fg="white")
         self.lblTitre.configure(justify='center')
         self.lblTitre.configure(font=("Courrier New", 10, "bold"))
-        
-        self.lblNombreChoix = tk.Label(self.panneauLateral, anchor="w")
-        self.lblNombreChoix.place(relx=0.05, rely=0.22, relheight=0.05, relwidth=0.45)
-        self.lblNombreChoix.configure(text="Nombre de choix : ", bg="grey", fg="white")
-        self.lblNombreChoix.configure(justify='center')
-        self.lblNombreChoix.configure(font=("Courrier New", 10, "bold"))
-
-        self.nbChoixVar = tk.StringVar()
-        self.nbChoixVar.set("2")
-        
-        self.entryNbChoix = tk.Entry(self.panneauLateral, textvariable=self.nbChoixVar)
-        self.entryNbChoix.place(relx=0.50, rely=0.22, width=50)
 
         self.lblDureeVote = tk.Label(self.panneauLateral, anchor="w")
-        self.lblDureeVote.place(relx=0.05, rely=0.32, relheight=0.05, relwidth=0.45)
+        self.lblDureeVote.place(relx=0.05, rely=0.22, relheight=0.05, relwidth=0.45)
         self.lblDureeVote.configure(text="Durée du vote (s): ", bg="grey", fg="white")
         self.lblDureeVote.configure(justify='center')
         self.lblDureeVote.configure(font=("Courrier New", 10, "bold"))
@@ -183,7 +175,7 @@ class appVote:
         self.dureeVoteVar.set("0")
         
         self.entryDureeVote = tk.Entry(self.panneauLateral, textvariable=self.dureeVoteVar)
-        self.entryDureeVote.place(relx=0.50, rely=0.32, width=50)
+        self.entryDureeVote.place(relx=0.50, rely=0.22, width=50)
 
         self.btnDemarrer = tk.Button(self.panneauLateral, text="Démarrer", command = self.controlerVote)
         self.btnDemarrer.place(relx=0.75, rely=0.22, relheight=0.05, relwidth=0.2)
@@ -210,7 +202,7 @@ class appVote:
         vsb.pack(side="right", fill="y")
         hsb.pack(side="bottom", fill="x")
 
-        self.tree.place(relx=0.05, rely=0.4, relheight=0.55, relwidth=0.9)
+        self.tree.place(relx=0.05, rely=0.32, relheight=0.65, relwidth=0.9)
         self.tree['show'] = 'tree headings'
 
         rng = range(len(self.parametres["couleurs_votes"]))
@@ -221,6 +213,7 @@ class appVote:
 
             self.tree.insert("", tk.END, text='', tags=self.parametres["couleurs_votes"][couleur], values=[str(i+1), ""])
             i += 1
+        
         self.tree.bind("<Button-1>", self.itemMouseEvent)
         self.tree.bind("<Button-3>", self.itemMouseEvent)
         self.tree.bind("<Double-1>", self.itemMouseEvent)
@@ -238,18 +231,20 @@ class appVote:
         
         rng = range(len(self.parametres["couleurs_votes"]))
         i = 0
+        print(f"Len(resultats) == {len(self.resultats)}")
         for couleur in rng :
-            
+            #logging.info(f"Insertion de l'item {i} : resultats[{i}] == {self.resultats[i]}.")            
             self.tree.insert("", tk.END, text='', tags=self.parametres["couleurs_votes"][couleur], values=[str(i+1), self.resultats[i]])
             i += 1
 
 
     def itemMouseEvent(self, event):
 
+        pass
         #itemSelect = self.tree.selection()
         # Si le bouton droit de la sourie est activé
-        if event.num == 1 :
-            self.majTreeview()
+        #if event.num == 1 :
+        #    self.majTreeview()
 
     def aliasActive(self):
         if self.myCheckAlias.get() == 1:
@@ -264,6 +259,8 @@ class appVote:
             self.btnDemarrer.configure(text="Arrêter", bg="red", fg="yellow", activebackground="red")
             print("Le vote est en cours.")
             self.effacerResultatVote()
+            self.initialiseVoteurs(self.parametres["nb_voteurs"], self.parametres["nb_colonnes"], self.parametres["nb_rangees"])
+            self.majTreeview()
             self.demarrerServeur()
             self.demarrerHorloge()
         else :
@@ -275,12 +272,18 @@ class appVote:
     def effacerResultatVote(self):
 
         print("Le résultat du vote précédent a été effacé.")
+        # Effacer la liste des résultats
+        rng =range(len(self.resultats))
+        for i in rng :
+            self.resultats[i] = 0
+            
         for voteur in self.voteurs :
-            voteur.setVote(-1)
+            voteur.setVote(-1, "grey")
 
     def demarrerServeur(self):
 
         self.t = threading.Thread ( target = self.tServer, daemon=True )
+        self.lafinSrv = False
         self.t.start()
         self.mAlias_check['state'] = tk.DISABLED
 
@@ -298,14 +301,14 @@ class appVote:
             
             print("En attente d'un client...")
 
-            while True :
+            while not self.lafinSrv :
 
                 readable, writable, errored = select.select(self.read_list, [], [])
 
                 for s in readable:
                     
                     if s is self.mServeur:
-            
+                        logging.info("Démarrage du thread serveur.")            
                         client, addr = s.accept()
                         self.read_list.append(client)
                         print(time.asctime() + "    Connexion établie avec le système : ", addr)
@@ -323,14 +326,13 @@ class appVote:
         
         finally:
             
-            print(len(read_list))
-            if len(read_list) > 0 :
-                readable, writable, errored = select.select(read_list, [], [])
+            if len(self.read_list) > 0 :
+
+                readable, writable, errored = select.select(self.read_list, [], [])
                 for s in readable:
                     s.close()
 
             print(time.asctime() + "    Connexion terminée.")
-            lafin = True
             
     def demarrerHorloge(self):
 
@@ -338,9 +340,26 @@ class appVote:
 
     def arreterServeur(self):
 
-        self.read_list.remove(self.mServeur)
-        self.mServeur.close()
         self.mAlias_check['state'] = tk.NORMAL
+
+        # Indiquer au thread serveur qu'il doit s'arrêter
+        self.lafinSrv = True
+
+        # Ici on initie une connexion au serveur afin de débloquer le thread serveur pour qu'il s'arrête 
+        try:
+            socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect((self.adresseIP, self.port))
+        except:
+            pass        
+
+        # Retirer le serveur de la liste des sockets actifs
+        try:
+            self.read_list.remove(self.mServeur)
+        except:
+            pass
+
+        # Terminer l'exécution du serveur
+        self.mServeur.close()
+
         print("Le serveur est arrêté.")
 
     def arreterHorloge(self):
@@ -351,20 +370,16 @@ class appVote:
 
         i = int(index)
 
-        print(f"str(vote) == {str(vote)}")
-        print(f"self.voteurs[{i}].getVote() == {self.voteurs[i].getVote()}")
         if self.voteurs[i].getVote() != -1 :
-            #breakpoint()
             self.resultats[self.voteurs[i].getVote()] -= 1
+
         self.resultats[vote] += 1
         self.majTreeview()
-        print(f"voteur ==>> {index}; choix = {vote}")
-        print(f"i == {i}")
         vv = self.voteurs[i]
         self.voteurs.remove(vv)
+        vot = voteur(self.root, vv.etiquette, str(vote+1))
         vv.destroy()
-        vot = voteur(self.root, vote+1)
-        vot.setVote(vote)
+        vot.setVote(vote, self.parametres["couleurs_votes"][vote])
         self.voteurs.insert(i, vot)
         
         vot.place(relx=0.05 + (i % self.nbColonnes) * (0.6 / self.nbColonnes),
@@ -388,10 +403,10 @@ class appVote:
 
             if self.myCheckAlias.get() == 0:
                 # Afficher l'index du voteur dans le GUI
-                self.vot = voteur(self.root, self.parametres["voteurs"][i][0])
+                self.vot = voteur(self.root, self.parametres["voteurs"][i][0], -1)
             else:
                 # Affichier l'alias
-                self.vot = voteur(self.root, self.parametres["voteurs"][i][1])
+                self.vot = voteur(self.root, self.parametres["voteurs"][i][1], -1)
         
             self.vot.place(relx=0.05 + (i % nb_colonnes) * (0.6 / nb_colonnes),
                            rely=0.30 + (i // nb_colonnes) * (0.6 / nb_lignes),
@@ -428,13 +443,18 @@ class appVote:
         self.root.quit()
 
     def majGUI(self, data):
+
+        try :
         
-        dataSplit = data.split(':')
-        print(dataSplit)
-        if int(dataSplit[0]) < self.nbVoteurs :
-            self.afficherVoteur(dataSplit[0], int(dataSplit[1]))
-        else :
-            tk.messagebox.showinfo("Attention!", f"Le voteur {dataSplit[0]} a transmis son vote mais il ne fait pas partie des voteurs autorisés.")
+            dataSplit = data.split(':')
+            print(dataSplit)
+            if int(dataSplit[0]) < self.nbVoteurs :
+                self.afficherVoteur(dataSplit[0], int(dataSplit[1]))
+            else :
+                tk.messagebox.showinfo("Attention!", f"Le voteur {dataSplit[0]} a transmis son vote mais il ne fait pas partie des voteurs autorisés.")
+
+        except Exception as e :
+            print("Erreur : Mauvais format de données reçu! " + str(e))
         
     def on_closing(self):
 
@@ -442,7 +462,11 @@ class appVote:
 
             self.lafin = True
             time.sleep(1)
-            
+
+format = "%(asctime)s: %(message)s"
+logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
+logging.info("Main    : Début du programme")
+
 application = appVote("1190x750+225+150")
 application.run()
     
