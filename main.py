@@ -304,15 +304,14 @@ class appVote:
             while not self.lafinSrv :
 
                 readable, writable, errored = select.select(self.read_list, [], [])
-
                 for s in readable:
-                    
-                    if s is self.mServeur:
-                        logging.info("Démarrage du thread serveur.")            
+
+                    if s is self.mServeur and (s.fileno() != -1) :
+                        logging.info("Démarrage du thread serveur.")
                         client, addr = s.accept()
                         self.read_list.append(client)
                         print(time.asctime() + "    Connexion établie avec le système : ", addr)
-                    else :
+                    elif s.fileno() != -1 :
                         data = s.recv(1024).decode()
                         if(len(data) > 0):
                             print("data serveur == " + data)
