@@ -2,28 +2,59 @@
 import tkinter
 from tkinter import ttk
 import tkinter.messagebox
-import socket
+import socket, time
+import pdb
 
 entryAdresseHote = None
 entryPortHote = None
 entryCommande = None
 
-def envoi():
-
+def envoyerDonnees(hote, port, donnees) :
+        
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        host = socket.gethostbyname(txtAdresse.get())
-        port = txtPort.get()
-        client.connect((host,int(port)))
-        #data = server.recv(1024)
-        #print(bytes.decode(data))
-
-        client.send(str.encode(txtCommande.get()))
-        #data = server.recv(1024)
-        #print("Received from server: ", bytes.decode(data))
+        client.connect((hote,int(port)))
+        client.send(str.encode(donnees.strip()))
         client.close()
     except Exception as e :
         tkinter.messagebox.showerror("Erreur", f"L'erreur suivante s'est produite : {e}")
+
+
+    
+def envoi():
+
+    tampon = txtCommande.get()
+    tamponSplit = tampon.split(' ')
+
+    if tampon[0:4] == "exe " :
+        with open(tamponSplit[1], 'r', newline='') as f_commandes:
+            ligne = f_commandes.readline()
+            while ligne:
+                print(f"ligne == {ligne}")
+                if ligne[0] == "#":
+                    pass
+                elif ligne[0:3] == "del" :
+                    ligneSplit = ligne.split(" ")
+                    time.sleep(float(ligneSplit[1].strip()))
+                else:
+                    envoyerDonnees(txtAdresse.get(), txtPort.get(), ligne)
+                ligne = f_commandes.readline()
+    else:
+        
+        try:
+            client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            host = socket.gethostbyname(txtAdresse.get())
+            port = txtPort.get()
+            client.connect((host,int(port)))
+            #data = server.recv(1024)
+            #print(bytes.decode(data))
+
+            client.send(str.encode(txtCommande.get()))
+            #data = server.recv(1024)
+            #print("Received from server: ", bytes.decode(data))
+            client.close()
+        except Exception as e :
+            tkinter.messagebox.showerror("Erreur", f"L'erreur suivante s'est produite : {e}")
 
 
 root = tkinter.Tk()
